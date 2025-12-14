@@ -3,14 +3,11 @@ pragma solidity ^0.8.19;
 import "../src/core/ClientChainGateway.sol";
 import "../src/core/BNBCapsule.sol";
 import "../src/core/ImuaCapsule.sol";
-import "../src/core/ImuachainGateway.sol";
-
 import {RewardVault} from "../src/core/RewardVault.sol";
 import {Vault} from "../src/core/Vault.sol";
 import {NetworkConstants} from "../src/libraries/NetworkConstants.sol";
 import "../src/utils/BeaconProxyBytecode.sol";
 import "../src/utils/CustomProxyAdmin.sol";
-import {ImuachainGatewayMock} from "../test/mocks/ImuachainGatewayMock.sol";
 
 import {BootstrapStorage} from "../src/storage/BootstrapStorage.sol";
 import {BaseScript} from "./BaseScript.sol";
@@ -21,49 +18,32 @@ import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.so
 import {ERC20PresetFixedSupply} from "@openzeppelin/contracts/token/ERC20/presets/ERC20PresetFixedSupply.sol";
 import "forge-std/Script.sol";
 
-contract DeployScript is BaseScript {
-
+/// @dev Single-chain deployment helper to avoid Foundry multi-fork + library-link limitation.
+/// Set only `CLIENT_CHAIN_RPC` (do NOT set `IMUACHAIN_TESTNET_RPC`) when running this script.
+contract DeployClientChainScript is BaseScript {
     function setUp() public virtual override {
         super.setUp();
+        require(clientChain != 0, "CLIENT_CHAIN_RPC not set");
 
         string memory prerequisites = vm.readFile("script/deployments/prerequisiteContracts.json");
-
-        clientChainLzEndpoint = ILayerZeroEndpointV2(
-            stdJson.readAddress(prerequisites, string.concat(".", clientChainName, ".lzEndpoint"))
-        );
+        clientChainLzEndpoint =
+            ILayerZeroEndpointV2(stdJson.readAddress(prerequisites, string.concat(".", clientChainName, ".lzEndpoint")));
         require(address(clientChainLzEndpoint) != address(0), "client chain l0 endpoint should not be empty");
 
         restakeToken = ERC20PresetFixedSupply(
             stdJson.readAddress(prerequisites, string.concat(".", clientChainName, ".erc20Token"))
         );
         require(address(restakeToken) != address(0), "restake token address should not be empty");
-
-        imuachainLzEndpoint = ILayerZeroEndpointV2(stdJson.readAddress(prerequisites, ".imuachain.lzEndpoint"));
-        require(address(imuachainLzEndpoint) != address(0), "imuachain l0 endpoint should not be empty");
-
-        if (useImuachainPrecompileMock) {
-            assetsMock = stdJson.readAddress(prerequisites, ".imuachain.assetsPrecompileMock");
-            require(assetsMock != address(0), "assetsMock should not be empty");
-
-            delegationMock = stdJson.readAddress(prerequisites, ".imuachain.delegationPrecompileMock");
-            require(delegationMock != address(0), "delegationMock should not be empty");
-
-            rewardMock = stdJson.readAddress(prerequisites, ".imuachain.rewardPrecompileMock");
-            require(rewardMock != address(0), "rewardMock should not be empty");
-        }
-
-        _topUpPlayer(imuachain, address(0), imuachainGenesis, deployer.addr, 1 ether);
     }
 
     function run() public {
-        // deploy clientchaingateway on client chain via rpc
         vm.selectFork(clientChain);
         vm.startBroadcast(deployer.privateKey);
 
-        // deploy beacon chain oracle
+        // deploy beacon chain oracle (needs NetworkConstants library linking)
         beaconOracle = new EigenLayerBeaconOracle(NetworkConstants.getBeaconGenesisTimestamp());
 
-        /// deploy implementations and beacons
+        // deploy implementations and beacons
         vaultImplementation = new Vault();
         if (vm.envOr("USE_BNB_CAPSULE", false)) {
             capsuleImplementation = new BNBCapsule();
@@ -79,7 +59,6 @@ contract DeployScript is BaseScript {
         beaconProxyBytecode = new BeaconProxyBytecode();
         clientChainProxyAdmin = new CustomProxyAdmin();
 
-        // Create ImmutableConfig struct
         BootstrapStorage.ImmutableConfig memory config = BootstrapStorage.ImmutableConfig({
             imuachainChainId: imuachainEndpointId,
             beaconOracleAddress: address(beaconOracle),
@@ -89,67 +68,38 @@ contract DeployScript is BaseScript {
             networkConfig: address(0)
         });
 
-        /// deploy client chain gateway
         ClientChainGateway clientGatewayLogic =
             new ClientChainGateway(address(clientChainLzEndpoint), config, address(rewardVaultBeacon));
 
         clientGateway = ClientChainGateway(
-            payable(address(
+            payable(
+                address(
                     new TransparentUpgradeableProxy(
                         address(clientGatewayLogic),
                         address(clientChainProxyAdmin),
                         abi.encodeWithSelector(clientGatewayLogic.initialize.selector, payable(owner.addr))
                     )
-                ))
+                )
+            )
         );
 
-        // get the reward vault address since it would be deployed during initialization
+        // deploy reward vault (requires owner)
+        vm.stopBroadcast();
+        vm.startBroadcast(owner.privateKey);
+        ClientChainGateway(payable(address(clientGateway))).deployRewardVault();
+        vm.stopBroadcast();
+
+        // read back created addresses
         rewardVault = ClientChainGateway(payable(address(clientGateway))).rewardVault();
         require(address(rewardVault) != address(0), "reward vault should not be empty");
 
-        // find vault according to uderlying token address
-        vault = Vault(address(ClientChainGateway(payable(address(clientGateway))).tokenToVault(address(restakeToken))));
-        require(address(vault) != address(0), "vault should not be empty");
+        // NOTE: LST vaults are deployed only after the whitelist-token message is received from Imuachain
+        // (see ClientGatewayLzReceiver.afterReceiveAddWhitelistTokenRequest). So at deploy time this is empty.
+        vault = Vault(address(0));
 
-        vm.stopBroadcast();
-
-        // deploy on Imuachain via rpc
-        vm.selectFork(imuachain);
-        vm.startBroadcast(deployer.privateKey);
-
-        // deploy Imuachain network contracts
-        ProxyAdmin imuachainProxyAdmin = new ProxyAdmin();
-
-        if (useImuachainPrecompileMock) {
-            ImuachainGatewayMock imuachainGatewayLogic =
-                new ImuachainGatewayMock(address(imuachainLzEndpoint), assetsMock, rewardMock, delegationMock);
-            imuachainGateway = ImuachainGateway(
-                payable(address(
-                        new TransparentUpgradeableProxy(
-                            address(imuachainGatewayLogic),
-                            address(imuachainProxyAdmin),
-                            abi.encodeWithSelector(imuachainGatewayLogic.initialize.selector, payable(owner.addr))
-                        )
-                    ))
-            );
-        } else {
-            ImuachainGateway imuachainGatewayLogic = new ImuachainGateway(address(imuachainLzEndpoint));
-            imuachainGateway = ImuachainGateway(
-                payable(address(
-                        new TransparentUpgradeableProxy(
-                            address(imuachainGatewayLogic),
-                            address(imuachainProxyAdmin),
-                            abi.encodeWithSelector(imuachainGatewayLogic.initialize.selector, payable(owner.addr))
-                        )
-                    ))
-            );
-        }
-
-        vm.stopBroadcast();
-
+        // Write a partial deployedContracts.json (client section only). 2B will merge in imuachain section.
         string memory deployedContracts = "deployedContracts";
         string memory clientChainContracts = "clientChainContracts";
-        string memory imuachainContracts = "imuachainContracts";
         vm.serializeAddress(clientChainContracts, "lzEndpoint", address(clientChainLzEndpoint));
         vm.serializeAddress(clientChainContracts, "beaconOracle", address(beaconOracle));
         vm.serializeAddress(clientChainContracts, "clientChainGateway", address(clientGateway));
@@ -163,22 +113,7 @@ contract DeployScript is BaseScript {
         string memory clientChainContractsOutput =
             vm.serializeAddress(clientChainContracts, "proxyAdmin", address(clientChainProxyAdmin));
 
-        vm.serializeAddress(imuachainContracts, "lzEndpoint", address(imuachainLzEndpoint));
-        vm.serializeAddress(imuachainContracts, "imuachainGateway", address(imuachainGateway));
-
-        if (useImuachainPrecompileMock) {
-            vm.serializeAddress(imuachainContracts, "assetsPrecompileMock", assetsMock);
-            vm.serializeAddress(imuachainContracts, "delegationPrecompileMock", delegationMock);
-            vm.serializeAddress(imuachainContracts, "rewardPrecompileMock", rewardMock);
-        }
-
-        string memory imuachainContractsOutput =
-            vm.serializeAddress(imuachainContracts, "proxyAdmin", address(imuachainProxyAdmin));
-
-        vm.serializeString(deployedContracts, clientChainName, clientChainContractsOutput);
-        string memory finalJson = vm.serializeString(deployedContracts, "imuachain", imuachainContractsOutput);
-
+        string memory finalJson = vm.serializeString(deployedContracts, clientChainName, clientChainContractsOutput);
         vm.writeJson(finalJson, "script/deployments/deployedContracts.json");
     }
-
 }
