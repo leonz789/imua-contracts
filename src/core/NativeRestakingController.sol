@@ -114,6 +114,53 @@ abstract contract NativeRestakingController is
         _processRequest(Action.REQUEST_DEPOSIT_NST, actionArgs, bytes(""));
     }
 
+    /// @notice Deposits native stake for non-Ethereum NST chains (e.g. BNB on BSC).
+    /// @dev This method is NOT using beacon-chain proofs. Instead, it forwards `msg.value` into the capsule
+    /// and lets the capsule perform chain-specific locking/delegation (e.g. StakeHub delegation).
+    /// The `validatorID` is forwarded to Imuachain as the NST identifier.
+    /// @param validatorID Chain-specific validator identifier. For BNB, we typically pass the validator EVM address bytes.
+    function depositNativeStake(bytes calldata validatorID)
+        external
+        payable
+        whenNotPaused
+        nonReentrant
+        nativeRestakingEnabled
+    {
+        // Generic NST flows are not supported for now.
+        // For BNBNST, use `depositBNBNST(address validator)` so that Imuachain's validatorID == capsule address.
+        validatorID;
+        revert Errors.NotYetSupported();
+    }
+
+    /// @notice BNBNST deposit on BSC-like chains.
+    /// @dev Flow:
+    /// - create capsule if first time
+    /// - capsule delegates BNB (capsule address becomes the on-chain "delegator")
+    /// - Imuachain depositNST uses validatorID = capsule address (oracle will later query lockedBNBs+pooledBNBs by capsule)
+    function depositBNBNST(address validator)
+        external
+        payable
+        whenNotPaused
+        nonReentrant
+        nativeRestakingEnabled
+    {
+        if (msg.value == 0) revert Errors.ZeroValue();
+        if (validator == address(0)) revert Errors.ZeroValue();
+
+        IImuaCapsule capsule = ownerToCapsule[msg.sender];
+        if (address(capsule) == address(0)) {
+            capsule = IImuaCapsule(createImuaCapsule());
+        }
+
+        (bool ok,) =
+            address(capsule).call{value: msg.value}(abi.encodeWithSignature("depositAndDelegate(address)", validator));
+        if (!ok) revert Errors.NativeRestakingControllerUnsupportedNativeDeposit();
+
+        // For BNB: validatorID on Imuachain is the delegator capsule address.
+        bytes memory actionArgs = abi.encodePacked(bytes32(bytes20(msg.sender)), uint256(msg.value), bytes20(address(capsule)));
+        _processRequest(Action.REQUEST_DEPOSIT_NST, actionArgs, bytes(""));
+    }
+
     /// @notice Send request to Imuachain to claim the NST principal.
     /// @notice This would not result in ETH transfer even if result is successful because it only unlocks the NST.
     /// @dev This function requests claim approval from Imuachain. If approved, the assets are

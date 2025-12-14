@@ -287,11 +287,31 @@ library Errors {
     /// @dev NativeRestakingController: message sender has already created the capsule
     error NativeRestakingControllerCapsuleAlreadyCreated();
 
+    /// @dev NativeRestakingController: the capsule doesn't support this native deposit mode
+    error NativeRestakingControllerUnsupportedNativeDeposit();
+
     /// @dev ImuaCapsule: claim already in progress
     error ClaimAlreadyInProgress();
 
     /// @dev ImuaCapsule: too early before last claim
     error TooEarlySinceLastClaim();
+
+    ////////////////////////////////////////
+    //         BNBCapsule Errors           //
+    ////////////////////////////////////////
+
+    /// @dev BNBCapsule: stakeHub not configured
+    error BNBCapsuleStakeHubNotSet();
+
+    /// @dev BNBCapsule: validator id is invalid
+    error BNBCapsuleInvalidValidatorId();
+
+    /// @dev BNBCapsule: claimable locked BNB is insufficient
+    error BNBCapsuleInsufficientClaimable();
+
+    /// @dev BNBCapsule: claim amount must match sum of whole claimable requests
+    error BNBCapsuleClaimAmountNotAligned();
+
 
     ////////////////////
     //  Vault Errors  //
