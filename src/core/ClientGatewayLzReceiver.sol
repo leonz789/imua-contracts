@@ -99,8 +99,8 @@ abstract contract ClientGatewayLzReceiver is PausableUpgradeable, OAppReceiverUp
                 if (!ok) {
                     // Default (ETH NST): always end claim flag, and unlock on success.
                     capsule.endClaimNST();
-                    if (requestSuccess) {
-                        capsule.unlockETHPrincipal(amount);
+                if (requestSuccess) {
+                    capsule.unlockETHPrincipal(amount);
                     }
                 }
             } else if (requestAct.isLST()) {

@@ -7,18 +7,18 @@ import {IBSCValidatorCredit} from "../interfaces/IBSCValidatorCredit.sol";
 import {IStakeHub} from "../interfaces/IStakeHub.sol";
 import {BeaconChainProofs} from "../libraries/BeaconChainProofs.sol";
 import {ValidatorContainer} from "../libraries/ValidatorContainer.sol";
-import {BNBCapsuleStorage} from "../storage/BNBCapsuleStorage.sol";
+import {ImuaCapsuleStorageBSC} from "../storage/ImuaCapsuleStorageBSC.sol";
 import {Errors} from "../libraries/Errors.sol";
 
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
-/// @title BNBCapsule
+/// @title ImuaCapsuleBSC
 /// @notice Capsule that holds delegators' BNB and delegates on their behalf, enabling BNB-native restaking.
 /// @dev Implements IImuaCapsule for compatibility with the existing gateway flow:
 /// - `withdrawPrincipal(VIRTUAL_NST_ADDRESS, ...)` calls `withdraw`
 /// - `claimNSTFromImuachain` uses `startClaimNST/endClaimNST`
 /// - Imuachain response unlocks via `unlockETHPrincipal` (name kept for compatibility; it unlocks BNB here)
-contract BNBCapsule is ReentrancyGuardUpgradeable, BNBCapsuleStorage, IImuaCapsule {
+contract ImuaCapsuleBSC is ReentrancyGuardUpgradeable, ImuaCapsuleStorageBSC, IImuaCapsule {
     /// @notice Emitted when stake hub is set.
     event StakeHubSet(address stakeHub);
 
@@ -34,11 +34,16 @@ contract BNBCapsule is ReentrancyGuardUpgradeable, BNBCapsuleStorage, IImuaCapsu
     /// @notice Emitted when a withdrawal is completed.
     event WithdrawalSuccess(address indexed owner, address indexed recipient, uint256 amount);
 
-    error OnlyGateway(address expected, address actual);
+    /// @dev Match `ImuaCapsule.InvalidCaller(address,address)` signature for consistency across capsules.
+    error InvalidCaller(address gateway, address caller);
 
     modifier onlyGateway() {
-        if (msg.sender != address(gateway)) revert OnlyGateway(address(gateway), msg.sender);
+        _onlyGateway();
         _;
+    }
+
+    function _onlyGateway() internal view {
+        if (msg.sender != address(gateway)) revert InvalidCaller(address(gateway), msg.sender);
     }
 
     /// @dev Accept native token transfers (BNB).
@@ -46,8 +51,8 @@ contract BNBCapsule is ReentrancyGuardUpgradeable, BNBCapsuleStorage, IImuaCapsu
 
     /// @inheritdoc IImuaCapsule
     function initialize(address gateway_, address payable capsuleOwner_, address /*beaconOracle*/ ) external initializer {
-        require(gateway_ != address(0), "BNBCapsule: gateway is zero");
-        require(capsuleOwner_ != address(0), "BNBCapsule: owner is zero");
+        require(gateway_ != address(0), "ImuaCapsuleBSC: gateway is zero");
+        require(capsuleOwner_ != address(0), "ImuaCapsuleBSC: owner is zero");
         gateway = INativeRestakingController(gateway_);
         capsuleOwner = capsuleOwner_;
         __ReentrancyGuard_init_unchained();
@@ -56,8 +61,8 @@ contract BNBCapsule is ReentrancyGuardUpgradeable, BNBCapsuleStorage, IImuaCapsu
     /// @notice Sets the stake hub contract address.
     /// @dev Called by the capsule owner (delegator). This is expected to be a one-time setup per network.
     function setStakeHub(address stakeHub_) external {
-        require(msg.sender == capsuleOwner, "BNBCapsule: only owner");
-        require(stakeHub_ != address(0), "BNBCapsule: stakeHub is zero");
+        require(msg.sender == capsuleOwner, "ImuaCapsuleBSC: only owner");
+        require(stakeHub_ != address(0), "ImuaCapsuleBSC: stakeHub is zero");
         stakeHub = stakeHub_;
         emit StakeHubSet(stakeHub_);
     }
@@ -201,13 +206,13 @@ contract BNBCapsule is ReentrancyGuardUpgradeable, BNBCapsuleStorage, IImuaCapsu
 
     /// @inheritdoc IImuaCapsule
     function withdraw(uint256 amount, address payable recipient) external onlyGateway nonReentrant {
-        require(recipient != address(0), "BNBCapsule: recipient is zero");
-        require(amount > 0 && amount <= withdrawableBalance, "BNBCapsule: invalid amount");
+        require(recipient != address(0), "ImuaCapsuleBSC: recipient is zero");
+        require(amount > 0 && amount <= withdrawableBalance, "ImuaCapsuleBSC: invalid amount");
         // funds must be present on the capsule
-        require(address(this).balance >= amount, "BNBCapsule: insufficient balance");
+        require(address(this).balance >= amount, "ImuaCapsuleBSC: insufficient balance");
         withdrawableBalance -= amount;
         (bool sent,) = recipient.call{value: amount}("");
-        require(sent, "BNBCapsule: send failed");
+        require(sent, "ImuaCapsuleBSC: send failed");
         emit WithdrawalSuccess(capsuleOwner, recipient, amount);
     }
 

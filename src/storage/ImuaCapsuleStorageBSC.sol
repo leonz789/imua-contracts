@@ -3,9 +3,9 @@ pragma solidity ^0.8.19;
 
 import {INativeRestakingController} from "../interfaces/INativeRestakingController.sol";
 
-/// @title BNBCapsuleStorage
-/// @notice Storage for BNBCapsule (BNB native staking capsule).
-contract BNBCapsuleStorage {
+/// @title ImuaCapsuleStorageBSC
+/// @notice Storage for ImuaCapsuleBSC (BNB native staking capsule).
+contract ImuaCapsuleStorageBSC {
     /// @notice The minimum interval between successful NST claims.
     uint256 public constant MIN_CLAIM_INTERVAL = 10 minutes;
 
