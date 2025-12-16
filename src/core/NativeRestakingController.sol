@@ -123,7 +123,6 @@ abstract contract NativeRestakingController is
         external
         payable
         whenNotPaused
-        nonReentrant
         nativeRestakingEnabled
     {
         // Generic NST flows are not supported for now.
