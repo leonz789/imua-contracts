@@ -6,6 +6,7 @@ import {INativeRestakingController} from "../interfaces/INativeRestakingControll
 import {IBSCValidatorCredit} from "../interfaces/IBSCValidatorCredit.sol";
 import {IStakeHub} from "../interfaces/IStakeHub.sol";
 import {BeaconChainProofs} from "../libraries/BeaconChainProofs.sol";
+import {ValidatorContainer} from "../libraries/ValidatorContainer.sol";
 import {BNBCapsuleStorage} from "../storage/BNBCapsuleStorage.sol";
 import {Errors} from "../libraries/Errors.sol";
 
@@ -231,5 +232,26 @@ contract BNBCapsule is ReentrancyGuardUpgradeable, BNBCapsuleStorage, IImuaCapsu
     /// @inheritdoc IImuaCapsule
     function isPectraMode() external pure returns (bool) {
         return false;
+    }
+
+    /// @inheritdoc IImuaCapsule
+    function requestPartialWithdrawal(bytes calldata, uint64) external payable onlyGateway {
+        revert Errors.NotYetSupported();
+    }
+
+    /// @inheritdoc IImuaCapsule
+    function requestFullWithdrawal(bytes calldata) external payable onlyGateway {
+        revert Errors.NotYetSupported();
+    }
+
+    /// @inheritdoc IImuaCapsule
+    function getCurrentWithdrawalFee() external pure returns (uint256) {
+        // Not applicable for BNB NST.
+        return 0;
+    }
+
+    /// @inheritdoc IImuaCapsule
+    function getPubkeyHash(bytes calldata pubkey) external pure returns (bytes32) {
+        return ValidatorContainer.computePubkeyHash(pubkey);
     }
 }
