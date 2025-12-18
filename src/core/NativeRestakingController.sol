@@ -11,6 +11,8 @@ import {BaseRestakingController} from "./BaseRestakingController.sol";
 
 import {Errors} from "../libraries/Errors.sol";
 
+import {MessagingFee, MessagingParams, MessagingReceipt} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import {OptionsBuilder} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
@@ -30,6 +32,7 @@ abstract contract NativeRestakingController is
 {
 
     using ValidatorContainer for bytes32[];
+    using OptionsBuilder for bytes;
 
     /// @notice Stakes 32 ETH on behalf of the validators in the Ethereum beacon chain, and
     /// points the withdrawal credentials to the capsule contract, creating it if necessary.
@@ -126,38 +129,45 @@ abstract contract NativeRestakingController is
         nativeRestakingEnabled
     {
         // Generic NST flows are not supported for now.
-        // For BNBNST, use `depositBNBNST(address validator)` so that Imuachain's validatorID == capsule address.
+        // For BNBNST, use `depositBNBNST(address validator, uint256 amount, uint256 lzFee)` so that Imuachain's
+        // validatorID == capsule address.
         validatorID;
         revert Errors.NotYetSupported();
     }
 
-    /// @notice BNBNST deposit on BSC-like chains.
-    /// @dev Flow:
-    /// - create capsule if first time
-    /// - capsule delegates BNB (capsule address becomes the on-chain "delegator")
-    /// - Imuachain depositNST uses validatorID = capsule address (oracle will later query lockedBNBs+pooledBNBs by capsule)
-    function depositBNBNST(address validator)
+    /// @notice BNBNST deposit where the caller also pays the L0 native fee.
+    /// @dev The caller must send `msg.value == amount + lzFee`.
+    /// Internally, we split value into:
+    /// - `amount` forwarded to capsule for staking/delegation
+    /// - `lzFee` forwarded to a self-call that executes `_processRequest` with `msg.value == lzFee`
+    function depositBNBNST(address validator, uint256 amount, uint256 lzFee)
         external
         payable
         whenNotPaused
         nonReentrant
         nativeRestakingEnabled
     {
-        if (msg.value == 0) revert Errors.ZeroValue();
+        if (amount == 0) revert Errors.ZeroValue();
         if (validator == address(0)) revert Errors.ZeroValue();
+
+        if (msg.value != amount + lzFee) revert IncorrectNativeFee(msg.value);
 
         IImuaCapsule capsule = ownerToCapsule[msg.sender];
         if (address(capsule) == address(0)) {
             capsule = IImuaCapsule(createImuaCapsule());
         }
 
-        (bool ok,) =
-            address(capsule).call{value: msg.value}(abi.encodeWithSignature("depositAndDelegate(address)", validator));
+        // REQUEST_DEPOSIT_NST(staker, amount, validatorID).
+        // `validatorID` must be at least 32 bytes to satisfy Imuachain message length validation.
+        bytes memory actionArgs =
+            abi.encodePacked(bytes32(bytes20(msg.sender)), amount, bytes32(bytes20(address(capsule))));
+
+        // Delegate/stake `amount` via the capsule.
+        (bool ok,) = address(capsule).call{value: amount}(abi.encodeWithSignature("depositAndDelegate(address)", validator));
         if (!ok) revert Errors.NativeRestakingControllerUnsupportedNativeDeposit();
 
-        // For BNB: validatorID on Imuachain is the delegator capsule address.
-        bytes memory actionArgs = abi.encodePacked(bytes32(bytes20(msg.sender)), uint256(msg.value), bytes20(address(capsule)));
-        _processRequest(Action.REQUEST_DEPOSIT_NST, actionArgs, bytes(""));
+        // Send L0 message using existing `_processRequest` logic, with `msg.value == lzFee` inside the self-call.
+        this.__processRequest{value: lzFee}(Action.REQUEST_DEPOSIT_NST, actionArgs, bytes(""));
     }
 
     /// @notice Send request to Imuachain to claim the NST principal.
