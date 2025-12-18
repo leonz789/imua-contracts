@@ -22,6 +22,7 @@ import {RewardVault} from "src/core/RewardVault.sol";
 import {BootstrapStorage} from "src/storage/BootstrapStorage.sol";
 import {IImuaCapsule} from "src/interfaces/IImuaCapsule.sol";
 import {IStakeHub} from "src/interfaces/IStakeHub.sol";
+import {IBSCValidatorCredit} from "src/interfaces/IBSCValidatorCredit.sol";
 import "src/interfaces/precompiles/IAssets.sol";
 import "src/interfaces/precompiles/IDelegation.sol";
 import "src/interfaces/precompiles/IReward.sol";
@@ -52,6 +53,13 @@ contract StakeHubMock is IStakeHub {
         lastValidator = operatorAddress;
         lastDelegateVotePower = delegateVotePower;
         lastDelegatedAmount = msg.value;
+
+        address creditContract = credit[operatorAddress];
+        if (creditContract != address(0)) {
+            // best-effort notification for tests
+            (bool ok,) = creditContract.call(abi.encodeWithSignature("onDelegate(address,uint256)", msg.sender, msg.value));
+            ok;
+        }
     }
 
     function undelegate(address, uint256) external {}
@@ -61,6 +69,29 @@ contract StakeHubMock is IStakeHub {
     }
 
     function claim(address, uint256) external {}
+}
+
+contract ValidatorCreditMock is IBSCValidatorCredit {
+    mapping(address delegator => uint256 pooled) public pooledBNB;
+    mapping(address delegator => uint256 lockedTotal) public lockedTotalBNB;
+
+    function onDelegate(address delegator, uint256 amount) external {
+        pooledBNB[delegator] += amount;
+    }
+
+    function claimableUnbondRequest(address) external pure returns (uint256) {
+        return 0;
+    }
+
+    function lockedBNBs(address delegator, uint256 number) external view returns (uint256) {
+        if (number == 0) return lockedTotalBNB[delegator];
+        // for unit test simplicity, we don't model per-request queue here.
+        return lockedTotalBNB[delegator];
+    }
+
+    function getPooledBNB(address delegator) external view returns (uint256) {
+        return pooledBNB[delegator];
+    }
 }
 
 contract BNBNST_Unit is Test {
@@ -83,6 +114,32 @@ contract BNBNST_Unit is Test {
     ILayerZeroEndpointV2 internal clientEndpoint;
     ILayerZeroEndpointV2 internal imuachainEndpoint;
     ImuachainGateway internal imuachainGateway;
+
+    function _deliverToImuachainAndAssertAssets(bytes memory actionArgs, address capsuleAddr, address stakerAddr)
+        internal
+    {
+        // Deliver the message on Imuachain and verify AssetsMock state updates.
+        bytes memory msg_ = abi.encodePacked(Action.REQUEST_DEPOSIT_NST, actionArgs);
+        vm.prank(address(imuachainEndpoint));
+        imuachainGateway.lzReceive(
+            Origin(uint32(CLIENT_EID), address(clientGateway).toBytes32(), uint64(1)),
+            bytes32(0),
+            msg_,
+            address(0x2),
+            bytes("")
+        );
+
+        address VIRTUAL_NST_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+        bytes memory nstToken = abi.encodePacked(bytes32(bytes20(VIRTUAL_NST_ADDRESS)));
+        bytes memory stakerBytes = abi.encodePacked(bytes32(bytes20(stakerAddr)));
+        bytes memory validatorId = abi.encodePacked(bytes32(bytes20(capsuleAddr)));
+
+        assertEq(
+            AssetsMock(ASSETS_PRECOMPILE_ADDRESS).getPrincipalBalance(uint32(CLIENT_EID), nstToken, stakerBytes),
+            1 ether
+        );
+        assertTrue(AssetsMock(ASSETS_PRECOMPILE_ADDRESS).inValidatorSet(stakerBytes, validatorId));
+    }
 
     function setUp() public {
         owner = Player({privateKey: 0xA, addr: vm.addr(0xA)});
@@ -179,8 +236,9 @@ contract BNBNST_Unit is Test {
 
         // configure StakeHub on capsule
         StakeHubMock stakeHub = new StakeHubMock();
+        ValidatorCreditMock creditMock = new ValidatorCreditMock();
         address validator = address(0xBEEF);
-        stakeHub.setCredit(validator, address(0xCAFE));
+        stakeHub.setCredit(validator, address(creditMock));
 
         vm.prank(staker.addr);
         ImuaCapsuleBSC(payable(capsuleAddr)).setStakeHub(address(stakeHub));
@@ -202,7 +260,13 @@ contract BNBNST_Unit is Test {
 
         // Capsule bound to validator + credit contract
         assertEq(ImuaCapsuleBSC(payable(capsuleAddr)).validator(), validator);
-        assertEq(ImuaCapsuleBSC(payable(capsuleAddr)).validatorCreditContract(), address(0xCAFE));
+        assertEq(ImuaCapsuleBSC(payable(capsuleAddr)).validatorCreditContract(), address(creditMock));
+
+        // Oracle/feeder view: capsule returns (pooled, locked)
+        (uint256 pooled, uint256 locked) = ImuaCapsuleBSC(payable(capsuleAddr)).getPooledAndLockedBNBs();
+        assertEq(pooled, 1 ether);
+        assertEq(locked, 0);
+        assertEq(pooled + locked, 1 ether);
 
         // Outbound message nonce incremented (message sent)
         uint64 outbound = NonShortCircuitEndpointV2Mock(address(clientEndpoint)).outboundNonce(
@@ -212,23 +276,7 @@ contract BNBNST_Unit is Test {
         );
         assertEq(outbound, 1);
 
-        // Deliver the message on Imuachain and verify AssetsMock state updates.
-        bytes memory msg_ = abi.encodePacked(Action.REQUEST_DEPOSIT_NST, actionArgs);
-        vm.prank(address(imuachainEndpoint));
-        imuachainGateway.lzReceive(
-            Origin(uint32(CLIENT_EID), address(clientGateway).toBytes32(), uint64(1)),
-            bytes32(0),
-            msg_,
-            address(0x2),
-            bytes("")
-        );
-
-        bytes memory nstToken = abi.encodePacked(bytes32(bytes20(VIRTUAL_NST_ADDRESS)));
-        bytes memory stakerBytes = abi.encodePacked(bytes32(bytes20(staker.addr)));
-        assertEq(AssetsMock(ASSETS_PRECOMPILE_ADDRESS).getPrincipalBalance(uint32(CLIENT_EID), nstToken, stakerBytes), 1 ether);
-        assertTrue(
-            AssetsMock(ASSETS_PRECOMPILE_ADDRESS).inValidatorSet(stakerBytes, abi.encodePacked(bytes32(bytes20(capsuleAddr))))
-        );
+        _deliverToImuachainAndAssertAssets(actionArgs, capsuleAddr, staker.addr);
 
         // Gateway shouldn't keep funds
         assertEq(address(clientGateway).balance, 0);

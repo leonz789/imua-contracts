@@ -108,14 +108,23 @@ contract ImuaCapsuleBSC is ReentrancyGuardUpgradeable, ImuaCapsuleStorageBSC, II
         emit Undelegated(capsuleOwner, validator, amount);
     }
 
-    /// @notice Returns lockedBNBs + pooledBNBs for this capsule from the validator credit contract.
-    /// @dev This is the value the off-chain oracle cares about for syncing to Imuachain.
-    function getPooledPlusLockedBNBs() external view returns (uint256) {
-        address credit = validatorCreditContract;
-        if (credit == address(0)) {
-            return 0;
+    /// @notice Returns (pooledBNB, lockedBNB) for this capsule.
+    /// @dev Convenience view for price-feeder/oracle queries:
+    /// the feeder only needs to query the capsule once.
+    /// Returns (0,0) if the capsule is not yet bound to a credit contract.
+    function getPooledAndLockedBNBs() public view returns (uint256 pooledBNB, uint256 lockedBNB) {
+        address creditContract = validatorCreditContract;
+        if (creditContract == address(0) && stakeHub != address(0) && validator != address(0)) {
+            // best-effort derivation for read-only queries
+            creditContract = IStakeHub(stakeHub).getValidatorCreditContract(validator);
         }
-        return IBSCValidatorCredit(credit).lockedBNBs(address(this), 0) + IBSCValidatorCredit(credit).getPooledBNB(address(this));
+
+        if (creditContract == address(0)) {
+            return (0, 0);
+        }
+
+        pooledBNB = IBSCValidatorCredit(creditContract).getPooledBNB(address(this));
+        lockedBNB = IBSCValidatorCredit(creditContract).lockedBNBs(address(this), 0);
     }
 
     /// @inheritdoc IImuaCapsule
