@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+import {IBSCValidatorCredit} from "../interfaces/IBSCValidatorCredit.sol";
 import {IImuaCapsule} from "../interfaces/IImuaCapsule.sol";
 import {INativeRestakingController} from "../interfaces/INativeRestakingController.sol";
-import {IBSCValidatorCredit} from "../interfaces/IBSCValidatorCredit.sol";
 import {IStakeHub} from "../interfaces/IStakeHub.sol";
 import {BeaconChainProofs} from "../libraries/BeaconChainProofs.sol";
+import {Errors} from "../libraries/Errors.sol";
 import {ValidatorContainer} from "../libraries/ValidatorContainer.sol";
 import {ImuaCapsuleStorageBSC} from "../storage/ImuaCapsuleStorageBSC.sol";
-import {Errors} from "../libraries/Errors.sol";
 
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
@@ -19,6 +19,7 @@ import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/se
 /// - `claimNSTFromImuachain` uses `startClaimNST/endClaimNST`
 /// - Imuachain response unlocks via `unlockETHPrincipal` (name kept for compatibility; it unlocks BNB here)
 contract ImuaCapsuleBSC is ReentrancyGuardUpgradeable, ImuaCapsuleStorageBSC, IImuaCapsule {
+
     /// @notice Emitted when stake hub is set.
     event StakeHubSet(address stakeHub);
 
@@ -43,14 +44,23 @@ contract ImuaCapsuleBSC is ReentrancyGuardUpgradeable, ImuaCapsuleStorageBSC, II
     }
 
     function _onlyGateway() internal view {
-        if (msg.sender != address(gateway)) revert InvalidCaller(address(gateway), msg.sender);
+        if (msg.sender != address(gateway)) {
+            revert InvalidCaller(address(gateway), msg.sender);
+        }
     }
 
     /// @dev Accept native token transfers (BNB).
     receive() external payable {}
 
     /// @inheritdoc IImuaCapsule
-    function initialize(address gateway_, address payable capsuleOwner_, address /*beaconOracle*/ ) external initializer {
+    function initialize(
+        address gateway_,
+        address payable capsuleOwner_,
+        address /*beaconOracle*/
+    )
+        external
+        initializer
+    {
         require(gateway_ != address(0), "ImuaCapsuleBSC: gateway is zero");
         require(capsuleOwner_ != address(0), "ImuaCapsuleBSC: owner is zero");
         gateway = INativeRestakingController(gateway_);
@@ -88,9 +98,15 @@ contract ImuaCapsuleBSC is ReentrancyGuardUpgradeable, ImuaCapsuleStorageBSC, II
     /// @dev Intended to be called by the gateway as part of BNBNST deposit.
     /// The delegator address on BSC will be THIS capsule (so oracle queries use capsule address).
     function depositAndDelegate(address validator_) external payable onlyGateway nonReentrant {
-        if (stakeHub == address(0)) revert Errors.BNBCapsuleStakeHubNotSet();
-        if (msg.value == 0) revert Errors.ZeroValue();
-        if (validator_ == address(0)) revert Errors.BNBCapsuleInvalidValidatorId();
+        if (stakeHub == address(0)) {
+            revert Errors.BNBCapsuleStakeHubNotSet();
+        }
+        if (msg.value == 0) {
+            revert Errors.ZeroValue();
+        }
+        if (validator_ == address(0)) {
+            revert Errors.BNBCapsuleInvalidValidatorId();
+        }
 
         // credit contract is derived from the BSC system contract StakeHub
         address credit = IStakeHub(stakeHub).getValidatorCreditContract(validator_);
@@ -103,7 +119,9 @@ contract ImuaCapsuleBSC is ReentrancyGuardUpgradeable, ImuaCapsuleStorageBSC, II
 
     /// @notice Undelegate BNB from a validator (best-effort; depends on stakeHub semantics).
     function undelegate(address validator, uint256 amount) external onlyGateway nonReentrant {
-        if (stakeHub == address(0)) revert Errors.BNBCapsuleStakeHubNotSet();
+        if (stakeHub == address(0)) {
+            revert Errors.BNBCapsuleStakeHubNotSet();
+        }
         IStakeHub(stakeHub).undelegate(validator, amount);
         emit Undelegated(capsuleOwner, validator, amount);
     }
@@ -139,16 +157,24 @@ contract ImuaCapsuleBSC is ReentrancyGuardUpgradeable, ImuaCapsuleStorageBSC, II
     /// @inheritdoc IImuaCapsule
     // forge-lint: disable-next-line(mixed-case-function)
     function startClaimNST(uint256 amount) external onlyGateway {
-        if (inClaimProgress) revert Errors.ClaimAlreadyInProgress();
-        if (amount == 0) revert Errors.ZeroValue();
+        if (inClaimProgress) {
+            revert Errors.ClaimAlreadyInProgress();
+        }
+        if (amount == 0) {
+            revert Errors.ZeroValue();
+        }
         address credit = validatorCreditContract;
-        if (credit == address(0)) revert Errors.BNBCapsuleInvalidValidatorId();
+        if (credit == address(0)) {
+            revert Errors.BNBCapsuleInvalidValidatorId();
+        }
 
         // Step 1) local pre-check: claim must be satisfied by currently claimable locked BNBs on BSC.
         // The credit contract exposes claimable request COUNT, not direct claimable amount,
         // so we must combine: lockedBNBs(capsule, N) where N is #claimable requests.
         uint256 maxClaimableRequests = IBSCValidatorCredit(credit).claimableUnbondRequest(address(this));
-        if (maxClaimableRequests == 0) revert Errors.BNBCapsuleInsufficientClaimable();
+        if (maxClaimableRequests == 0) {
+            revert Errors.BNBCapsuleInsufficientClaimable();
+        }
 
         // Find smallest N such that lockedBNBs(this, N) >= amount.
         uint256 lo = 1;
@@ -159,18 +185,26 @@ contract ImuaCapsuleBSC is ReentrancyGuardUpgradeable, ImuaCapsuleStorageBSC, II
             uint256 sumMid = IBSCValidatorCredit(credit).lockedBNBs(address(this), mid);
             if (sumMid >= amount) {
                 ans = mid;
-                if (mid == 0) break;
+                if (mid == 0) {
+                    break;
+                }
                 hi = mid - 1;
             } else {
                 lo = mid + 1;
             }
         }
-        if (ans == 0) revert Errors.BNBCapsuleInsufficientClaimable();
+        if (ans == 0) {
+            revert Errors.BNBCapsuleInsufficientClaimable();
+        }
 
         uint256 exact = IBSCValidatorCredit(credit).lockedBNBs(address(this), ans);
-        if (exact != amount) revert Errors.BNBCapsuleClaimAmountNotAligned();
+        if (exact != amount) {
+            revert Errors.BNBCapsuleClaimAmountNotAligned();
+        }
 
-        if (block.timestamp < lastClaimTimestamp + MIN_CLAIM_INTERVAL) revert Errors.TooEarlySinceLastClaim();
+        if (block.timestamp < lastClaimTimestamp + MIN_CLAIM_INTERVAL) {
+            revert Errors.TooEarlySinceLastClaim();
+        }
 
         // Step 2) mark flag + freeze oracle updates for this capsule.
         inClaimProgress = true;
@@ -191,15 +225,23 @@ contract ImuaCapsuleBSC is ReentrancyGuardUpgradeable, ImuaCapsuleStorageBSC, II
     /// Failure flow:
     /// - clear claim-in-progress flags only
     function finalizeClaimNST(uint256 amount, bool success) external onlyGateway nonReentrant {
-        if (!inClaimProgress) revert Errors.NotYetSupported();
+        if (!inClaimProgress) {
+            revert Errors.NotYetSupported();
+        }
         // Imuachain may slash between request and response, resulting in a smaller approved amount.
         // In that case, BSC claim will still transfer the full `pendingClaimAmount` into this capsule,
         // but we only credit `withdrawableBalance` by the approved `amount`.
-        if (amount == 0 || amount > pendingClaimAmount) revert Errors.BNBCapsuleClaimAmountNotAligned();
+        if (amount == 0 || amount > pendingClaimAmount) {
+            revert Errors.BNBCapsuleClaimAmountNotAligned();
+        }
 
         if (success) {
-            if (stakeHub == address(0)) revert Errors.BNBCapsuleStakeHubNotSet();
-            if (validator == address(0)) revert Errors.BNBCapsuleInvalidValidatorId();
+            if (stakeHub == address(0)) {
+                revert Errors.BNBCapsuleStakeHubNotSet();
+            }
+            if (validator == address(0)) {
+                revert Errors.BNBCapsuleInvalidValidatorId();
+            }
             // Step 4) execute BSC claim, BNB will be transferred to THIS capsule.
             IStakeHub(stakeHub).claim(validator, pendingClaimRequestCount);
             // Now those BNBs are withdrawable.
@@ -268,4 +310,5 @@ contract ImuaCapsuleBSC is ReentrancyGuardUpgradeable, ImuaCapsuleStorageBSC, II
     function getPubkeyHash(bytes calldata pubkey) external pure returns (bytes32) {
         return ValidatorContainer.computePubkeyHash(pubkey);
     }
+
 }

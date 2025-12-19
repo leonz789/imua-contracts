@@ -6,6 +6,7 @@ import {INativeRestakingController} from "../interfaces/INativeRestakingControll
 /// @title ImuaCapsuleStorageBSC
 /// @notice Storage for ImuaCapsuleBSC (BNB native staking capsule).
 contract ImuaCapsuleStorageBSC {
+
     /// @notice The minimum interval between successful NST claims.
     uint256 public constant MIN_CLAIM_INTERVAL = 10 minutes;
 
@@ -41,4 +42,5 @@ contract ImuaCapsuleStorageBSC {
 
     /// @dev Storage gap for upgrade safety.
     uint256[41] private __gap;
+
 }

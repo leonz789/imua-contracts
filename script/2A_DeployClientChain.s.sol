@@ -1,8 +1,8 @@
 pragma solidity ^0.8.19;
 
 import "../src/core/ClientChainGateway.sol";
-import "../src/core/ImuaCapsuleBSC.sol";
 import "../src/core/ImuaCapsule.sol";
+import "../src/core/ImuaCapsuleBSC.sol";
 import {RewardVault} from "../src/core/RewardVault.sol";
 import {Vault} from "../src/core/Vault.sol";
 import {NetworkConstants} from "../src/libraries/NetworkConstants.sol";
@@ -21,13 +21,15 @@ import "forge-std/Script.sol";
 /// @dev Single-chain deployment helper to avoid Foundry multi-fork + library-link limitation.
 /// Set only `CLIENT_CHAIN_RPC` (do NOT set `IMUACHAIN_TESTNET_RPC`) when running this script.
 contract DeployClientChainScript is BaseScript {
+
     function setUp() public virtual override {
         super.setUp();
         require(clientChain != 0, "CLIENT_CHAIN_RPC not set");
 
         string memory prerequisites = vm.readFile("script/deployments/prerequisiteContracts.json");
-        clientChainLzEndpoint =
-            ILayerZeroEndpointV2(stdJson.readAddress(prerequisites, string.concat(".", clientChainName, ".lzEndpoint")));
+        clientChainLzEndpoint = ILayerZeroEndpointV2(
+            stdJson.readAddress(prerequisites, string.concat(".", clientChainName, ".lzEndpoint"))
+        );
         require(address(clientChainLzEndpoint) != address(0), "client chain l0 endpoint should not be empty");
 
         restakeToken = ERC20PresetFixedSupply(
@@ -72,15 +74,13 @@ contract DeployClientChainScript is BaseScript {
             new ClientChainGateway(address(clientChainLzEndpoint), config, address(rewardVaultBeacon));
 
         clientGateway = ClientChainGateway(
-            payable(
-                address(
+            payable(address(
                     new TransparentUpgradeableProxy(
                         address(clientGatewayLogic),
                         address(clientChainProxyAdmin),
                         abi.encodeWithSelector(clientGatewayLogic.initialize.selector, payable(owner.addr))
                     )
-                )
-            )
+                ))
         );
 
         // deploy reward vault (requires owner)
@@ -116,4 +116,5 @@ contract DeployClientChainScript is BaseScript {
         string memory finalJson = vm.serializeString(deployedContracts, clientChainName, clientChainContractsOutput);
         vm.writeJson(finalJson, "script/deployments/deployedContracts.json");
     }
+
 }

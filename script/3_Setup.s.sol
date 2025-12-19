@@ -132,10 +132,7 @@ contract SetupScript is BaseScript {
             bytes memory msg_ = abi.encodePacked(
                 Action.REQUEST_ADD_WHITELIST_TOKEN, abi.encodePacked(whitelistTokensBytes32[i], tvlLimits[i])
             );
-            nativeFee = imuachainGateway.quote(
-                clientChainEndpointId,
-                msg_
-            );
+            nativeFee = imuachainGateway.quote(clientChainEndpointId, msg_);
             imuachainGateway.addWhitelistToken{value: nativeFee}(
                 clientChainEndpointId,
                 whitelistTokensBytes32[i],

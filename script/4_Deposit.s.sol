@@ -2,9 +2,9 @@ pragma solidity ^0.8.19;
 
 import "../src/interfaces/IClientChainGateway.sol";
 
+import "../src/core/ClientChainGateway.sol";
 import "../src/interfaces/IImuachainGateway.sol";
 import "../src/interfaces/IVault.sol";
-import "../src/core/ClientChainGateway.sol";
 import {Action, GatewayStorage} from "../src/storage/GatewayStorage.sol";
 
 import {BaseScript} from "./BaseScript.sol";
@@ -73,9 +73,7 @@ contract DepositScript is BaseScript {
 
         // For local runs, vault might be deployed only after whitelisting is delivered; resolve it dynamically.
         if (address(vault) == address(0)) {
-            vault = IVault(
-                ClientChainGateway(payable(address(clientGateway))).tokenToVault(address(restakeToken))
-            );
+            vault = IVault(ClientChainGateway(payable(address(clientGateway))).tokenToVault(address(restakeToken)));
         }
         require(address(vault) != address(0), "vault address should not be empty");
 

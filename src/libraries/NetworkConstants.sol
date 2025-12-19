@@ -104,14 +104,7 @@ library NetworkConstants {
             //   (which calls ETH_POS.deposit) will revert on BSC.
             // - other params are set to sensible defaults / non-zero placeholders to satisfy contracts that require
             //   a non-zero value but do not actually use them on BSC (e.g. when BNBCapsule is used).
-            return NetworkParams(
-                address(0),
-                1,
-                SLOTS_PER_EPOCH_DEFAULT,
-                SECONDS_PER_SLOT_DEFAULT,
-                1,
-                1
-            );
+            return NetworkParams(address(0), 1, SLOTS_PER_EPOCH_DEFAULT, SECONDS_PER_SLOT_DEFAULT, 1, 1);
         } else {
             // note that goerli is deprecated
             revert("Unsupported network");

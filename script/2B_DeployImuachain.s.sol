@@ -12,6 +12,7 @@ import "forge-std/Script.sol";
 /// @dev Single-chain deployment helper to avoid Foundry multi-fork + library-link limitation.
 /// Set only `IMUACHAIN_TESTNET_RPC` (do NOT set `CLIENT_CHAIN_RPC`) when running this script.
 contract DeployImuachainScript is BaseScript {
+
     function setUp() public virtual override {
         super.setUp();
         require(imuachain != 0, "IMUACHAIN_TESTNET_RPC not set");
@@ -42,28 +43,24 @@ contract DeployImuachainScript is BaseScript {
             ImuachainGatewayMock imuachainGatewayLogic =
                 new ImuachainGatewayMock(address(imuachainLzEndpoint), assetsMock, rewardMock, delegationMock);
             imuachainGateway = ImuachainGateway(
-                payable(
-                    address(
+                payable(address(
                         new TransparentUpgradeableProxy(
                             address(imuachainGatewayLogic),
                             address(imuachainProxyAdmin),
                             abi.encodeWithSelector(imuachainGatewayLogic.initialize.selector, payable(owner.addr))
                         )
-                    )
-                )
+                    ))
             );
         } else {
             ImuachainGateway imuachainGatewayLogic = new ImuachainGateway(address(imuachainLzEndpoint));
             imuachainGateway = ImuachainGateway(
-                payable(
-                    address(
+                payable(address(
                         new TransparentUpgradeableProxy(
                             address(imuachainGatewayLogic),
                             address(imuachainProxyAdmin),
                             abi.encodeWithSelector(imuachainGatewayLogic.initialize.selector, payable(owner.addr))
                         )
-                    )
-                )
+                    ))
             );
         }
 
@@ -78,37 +75,60 @@ contract DeployImuachainScript is BaseScript {
         string memory deployedContracts = "deployedContracts";
         string memory clientChainContracts = "clientChainContracts";
         vm.serializeAddress(
-            clientChainContracts, "lzEndpoint", stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".lzEndpoint"))
+            clientChainContracts,
+            "lzEndpoint",
+            stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".lzEndpoint"))
         );
         vm.serializeAddress(
-            clientChainContracts, "beaconOracle", stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".beaconOracle"))
+            clientChainContracts,
+            "beaconOracle",
+            stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".beaconOracle"))
         );
         vm.serializeAddress(
-            clientChainContracts, "clientChainGateway", stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".clientChainGateway"))
+            clientChainContracts,
+            "clientChainGateway",
+            stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".clientChainGateway"))
         );
         vm.serializeAddress(
-            clientChainContracts, "resVault", stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".resVault"))
+            clientChainContracts,
+            "resVault",
+            stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".resVault"))
         );
         vm.serializeAddress(
-            clientChainContracts, "rewardVault", stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".rewardVault"))
+            clientChainContracts,
+            "rewardVault",
+            stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".rewardVault"))
         );
         vm.serializeAddress(
-            clientChainContracts, "erc20Token", stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".erc20Token"))
+            clientChainContracts,
+            "erc20Token",
+            stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".erc20Token"))
         );
         vm.serializeAddress(
-            clientChainContracts, "vaultBeacon", stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".vaultBeacon"))
+            clientChainContracts,
+            "vaultBeacon",
+            stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".vaultBeacon"))
         );
         vm.serializeAddress(
-            clientChainContracts, "rewardVaultBeacon", stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".rewardVaultBeacon"))
+            clientChainContracts,
+            "rewardVaultBeacon",
+            stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".rewardVaultBeacon"))
         );
         vm.serializeAddress(
-            clientChainContracts, "capsuleBeacon", stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".capsuleBeacon"))
+            clientChainContracts,
+            "capsuleBeacon",
+            stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".capsuleBeacon"))
         );
         vm.serializeAddress(
-            clientChainContracts, "beaconProxyBytecode", stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".beaconProxyBytecode"))
+            clientChainContracts,
+            "beaconProxyBytecode",
+            stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".beaconProxyBytecode"))
         );
-        string memory clientChainContractsOutput =
-            vm.serializeAddress(clientChainContracts, "proxyAdmin", stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".proxyAdmin")));
+        string memory clientChainContractsOutput = vm.serializeAddress(
+            clientChainContracts,
+            "proxyAdmin",
+            stdJson.readAddress(deployedContractsStr, string.concat(".", clientName, ".proxyAdmin"))
+        );
 
         // serialize imuachain section
         string memory imuachainContracts = "imuachainContracts";
@@ -126,4 +146,5 @@ contract DeployImuachainScript is BaseScript {
         string memory finalJson = vm.serializeString(deployedContracts, "imuachain", imuachainContractsOutput);
         vm.writeJson(finalJson, "script/deployments/deployedContracts.json");
     }
+
 }

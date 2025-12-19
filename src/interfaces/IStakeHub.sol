@@ -6,6 +6,7 @@ pragma solidity ^0.8.19;
 /// @dev The real StakeHub / staking system contract may differ across networks.
 /// This interface is intentionally minimal and can be adapted per deployment via a custom implementation.
 interface IStakeHub {
+
     /// @notice Delegate native token (BNB) to a validator.
     /// @param operatorAddress The validator/operator address to delegate to.
     /// @param delegateVotePower Whether to delegate governance voting power to the validator.
@@ -22,4 +23,5 @@ interface IStakeHub {
     /// @notice Claim unbonded BNB for a validator.
     /// @dev requestNumber==0 claims all available unbond requests for that validator.
     function claim(address operatorAddress, uint256 requestNumber) external;
+
 }

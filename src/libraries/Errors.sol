@@ -312,7 +312,6 @@ library Errors {
     /// @dev BNBCapsule: claim amount must match sum of whole claimable requests
     error BNBCapsuleClaimAmountNotAligned();
 
-
     ////////////////////
     //  Vault Errors  //
     ////////////////////

@@ -5,6 +5,7 @@ pragma solidity ^0.8.19;
 /// @notice Minimal interface for per-validator credit contract on BSC.
 /// @dev Each validator has its own credit contract tracking delegators' locked + pooled BNB.
 interface IBSCValidatorCredit {
+
     /// @notice Returns how many unbond requests are claimable now.
     function claimableUnbondRequest(address delegator) external view returns (uint256);
 
@@ -14,5 +15,6 @@ interface IBSCValidatorCredit {
 
     /// @notice Current pooled BNB for delegator.
     function getPooledBNB(address delegator) external view returns (uint256);
+
 }
 

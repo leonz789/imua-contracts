@@ -11,8 +11,12 @@ import {BaseRestakingController} from "./BaseRestakingController.sol";
 
 import {Errors} from "../libraries/Errors.sol";
 
-import {MessagingFee, MessagingParams, MessagingReceipt} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 import {OptionsBuilder} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
+import {
+    MessagingFee,
+    MessagingParams,
+    MessagingReceipt
+} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
@@ -121,13 +125,9 @@ abstract contract NativeRestakingController is
     /// @dev This method is NOT using beacon-chain proofs. Instead, it forwards `msg.value` into the capsule
     /// and lets the capsule perform chain-specific locking/delegation (e.g. StakeHub delegation).
     /// The `validatorID` is forwarded to Imuachain as the NST identifier.
-    /// @param validatorID Chain-specific validator identifier. For BNB, we typically pass the validator EVM address bytes.
-    function depositNativeStake(bytes calldata validatorID)
-        external
-        payable
-        whenNotPaused
-        nativeRestakingEnabled
-    {
+    /// @param validatorID Chain-specific validator identifier. For BNB, we typically pass the validator EVM address
+    /// bytes.
+    function depositNativeStake(bytes calldata validatorID) external payable whenNotPaused nativeRestakingEnabled {
         // Generic NST flows are not supported for now.
         // For BNBNST, use `depositBNBNST(address validator, uint256 amount, uint256 lzFee)` so that Imuachain's
         // validatorID == capsule address.
@@ -147,10 +147,16 @@ abstract contract NativeRestakingController is
         nonReentrant
         nativeRestakingEnabled
     {
-        if (amount == 0) revert Errors.ZeroValue();
-        if (validator == address(0)) revert Errors.ZeroValue();
+        if (amount == 0) {
+            revert Errors.ZeroValue();
+        }
+        if (validator == address(0)) {
+            revert Errors.ZeroValue();
+        }
 
-        if (msg.value != amount + lzFee) revert IncorrectNativeFee(msg.value);
+        if (msg.value != amount + lzFee) {
+            revert IncorrectNativeFee(msg.value);
+        }
 
         IImuaCapsule capsule = ownerToCapsule[msg.sender];
         if (address(capsule) == address(0)) {
@@ -163,8 +169,11 @@ abstract contract NativeRestakingController is
             abi.encodePacked(bytes32(bytes20(msg.sender)), amount, bytes32(bytes20(address(capsule))));
 
         // Delegate/stake `amount` via the capsule.
-        (bool ok,) = address(capsule).call{value: amount}(abi.encodeWithSignature("depositAndDelegate(address)", validator));
-        if (!ok) revert Errors.NativeRestakingControllerUnsupportedNativeDeposit();
+        (bool ok,) =
+            address(capsule).call{value: amount}(abi.encodeWithSignature("depositAndDelegate(address)", validator));
+        if (!ok) {
+            revert Errors.NativeRestakingControllerUnsupportedNativeDeposit();
+        }
 
         // Send L0 message using existing `_processRequest` logic, with `msg.value == lzFee` inside the self-call.
         this.__processRequest{value: lzFee}(Action.REQUEST_DEPOSIT_NST, actionArgs, bytes(""));

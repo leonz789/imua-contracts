@@ -5,38 +5,42 @@ import "forge-std/Test.sol";
 
 import {EigenLayerBeaconOracle} from "@beacon-oracle/contracts/src/EigenLayerBeaconOracle.sol";
 import {IBeaconChainOracle} from "@beacon-oracle/contracts/src/IBeaconChainOracle.sol";
-import {ILayerZeroEndpointV2, Origin} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import {
+    ILayerZeroEndpointV2,
+    Origin
+} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 import {AddressCast} from "@layerzerolabs/lz-evm-protocol-v2/contracts/libs/AddressCast.sol";
 
-import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import {IBeacon} from "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
+import {UpgradeableBeacon} from "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 import {ClientChainGateway} from "src/core/ClientChainGateway.sol";
-import {ImuachainGateway} from "src/core/ImuachainGateway.sol";
 import {ImuaCapsuleBSC} from "src/core/ImuaCapsuleBSC.sol";
-import {Vault} from "src/core/Vault.sol";
+import {ImuachainGateway} from "src/core/ImuachainGateway.sol";
 import {RewardVault} from "src/core/RewardVault.sol";
+import {Vault} from "src/core/Vault.sol";
 
-import {BootstrapStorage} from "src/storage/BootstrapStorage.sol";
+import {IBSCValidatorCredit} from "src/interfaces/IBSCValidatorCredit.sol";
 import {IImuaCapsule} from "src/interfaces/IImuaCapsule.sol";
 import {IStakeHub} from "src/interfaces/IStakeHub.sol";
-import {IBSCValidatorCredit} from "src/interfaces/IBSCValidatorCredit.sol";
 import "src/interfaces/precompiles/IAssets.sol";
 import "src/interfaces/precompiles/IDelegation.sol";
 import "src/interfaces/precompiles/IReward.sol";
+import {BootstrapStorage} from "src/storage/BootstrapStorage.sol";
 
 import {NetworkConstants} from "src/libraries/NetworkConstants.sol";
 import {Action} from "src/storage/GatewayStorage.sol";
 import {BeaconProxyBytecode} from "src/utils/BeaconProxyBytecode.sol";
 
-import {NonShortCircuitEndpointV2Mock} from "test/mocks/NonShortCircuitEndpointV2Mock.sol";
 import "test/mocks/AssetsMock.sol";
 import "test/mocks/DelegationMock.sol";
+import {NonShortCircuitEndpointV2Mock} from "test/mocks/NonShortCircuitEndpointV2Mock.sol";
 import "test/mocks/RewardMock.sol";
 
 contract StakeHubMock is IStakeHub {
+
     address public lastDelegator;
     address public lastValidator;
     bool public lastDelegateVotePower;
@@ -57,7 +61,8 @@ contract StakeHubMock is IStakeHub {
         address creditContract = credit[operatorAddress];
         if (creditContract != address(0)) {
             // best-effort notification for tests
-            (bool ok,) = creditContract.call(abi.encodeWithSignature("onDelegate(address,uint256)", msg.sender, msg.value));
+            (bool ok,) =
+                creditContract.call(abi.encodeWithSignature("onDelegate(address,uint256)", msg.sender, msg.value));
             ok;
         }
     }
@@ -69,9 +74,11 @@ contract StakeHubMock is IStakeHub {
     }
 
     function claim(address, uint256) external {}
+
 }
 
 contract ValidatorCreditMock is IBSCValidatorCredit {
+
     mapping(address delegator => uint256 pooled) public pooledBNB;
     mapping(address delegator => uint256 lockedTotal) public lockedTotalBNB;
 
@@ -84,7 +91,9 @@ contract ValidatorCreditMock is IBSCValidatorCredit {
     }
 
     function lockedBNBs(address delegator, uint256 number) external view returns (uint256) {
-        if (number == 0) return lockedTotalBNB[delegator];
+        if (number == 0) {
+            return lockedTotalBNB[delegator];
+        }
         // for unit test simplicity, we don't model per-request queue here.
         return lockedTotalBNB[delegator];
     }
@@ -92,9 +101,11 @@ contract ValidatorCreditMock is IBSCValidatorCredit {
     function getPooledBNB(address delegator) external view returns (uint256) {
         return pooledBNB[delegator];
     }
+
 }
 
 contract BNBNST_Unit is Test {
+
     using AddressCast for address;
     using stdStorage for StdStorage;
 
@@ -159,10 +170,12 @@ contract BNBNST_Unit is Test {
 
         // endpoints
         clientEndpoint = ILayerZeroEndpointV2(address(new NonShortCircuitEndpointV2Mock(CLIENT_EID, deployer.addr)));
-        imuachainEndpoint = ILayerZeroEndpointV2(address(new NonShortCircuitEndpointV2Mock(IMUACHAIN_EID, deployer.addr)));
+        imuachainEndpoint =
+            ILayerZeroEndpointV2(address(new NonShortCircuitEndpointV2Mock(IMUACHAIN_EID, deployer.addr)));
 
         // deploy logic + proxy
-        IBeaconChainOracle beaconOracle = IBeaconChainOracle(new EigenLayerBeaconOracle(NetworkConstants.getBeaconGenesisTimestamp()));
+        IBeaconChainOracle beaconOracle =
+            IBeaconChainOracle(new EigenLayerBeaconOracle(NetworkConstants.getBeaconGenesisTimestamp()));
         Vault vaultImpl = new Vault();
         RewardVault rewardVaultImpl = new RewardVault();
         IImuaCapsule capsuleImpl = new ImuaCapsuleBSC();
@@ -186,15 +199,13 @@ contract BNBNST_Unit is Test {
         ProxyAdmin admin = new ProxyAdmin();
 
         clientGateway = ClientChainGateway(
-            payable(
-                address(
+            payable(address(
                     new TransparentUpgradeableProxy(
                         address(logic),
                         address(admin),
                         abi.encodeWithSelector(ClientChainGateway.initialize.selector, owner.addr)
                     )
-                )
-            )
+                ))
         );
 
         // deploy imuachain gateway (proxy) and register client chain peer
@@ -208,17 +219,14 @@ contract BNBNST_Unit is Test {
 
         vm.prank(owner.addr);
         imuachainGateway.registerOrUpdateClientChain(
-            CLIENT_EID,
-            address(clientGateway).toBytes32(),
-            20,
-            "client",
-            "unit test client",
-            "secp256k1"
+            CLIENT_EID, address(clientGateway).toBytes32(), 20, "client", "unit test client", "secp256k1"
         );
 
         // endpoint routing (for completeness)
-        NonShortCircuitEndpointV2Mock(address(clientEndpoint)).setDestLzEndpoint(address(imuachainGateway), address(imuachainEndpoint));
-        NonShortCircuitEndpointV2Mock(address(imuachainEndpoint)).setDestLzEndpoint(address(clientGateway), address(clientEndpoint));
+        NonShortCircuitEndpointV2Mock(address(clientEndpoint))
+            .setDestLzEndpoint(address(imuachainGateway), address(imuachainEndpoint));
+        NonShortCircuitEndpointV2Mock(address(imuachainEndpoint))
+            .setDestLzEndpoint(address(clientGateway), address(clientEndpoint));
 
         vm.prank(owner.addr);
         clientGateway.setPeer(IMUACHAIN_EID, address(imuachainGateway).toBytes32());
@@ -269,11 +277,8 @@ contract BNBNST_Unit is Test {
         assertEq(pooled + locked, 1 ether);
 
         // Outbound message nonce incremented (message sent)
-        uint64 outbound = NonShortCircuitEndpointV2Mock(address(clientEndpoint)).outboundNonce(
-            address(clientGateway),
-            IMUACHAIN_EID,
-            address(imuachainGateway).toBytes32()
-        );
+        uint64 outbound = NonShortCircuitEndpointV2Mock(address(clientEndpoint))
+            .outboundNonce(address(clientGateway), IMUACHAIN_EID, address(imuachainGateway).toBytes32());
         assertEq(outbound, 1);
 
         _deliverToImuachainAndAssertAssets(actionArgs, capsuleAddr, staker.addr);
@@ -281,4 +286,5 @@ contract BNBNST_Unit is Test {
         // Gateway shouldn't keep funds
         assertEq(address(clientGateway).balance, 0);
     }
+
 }

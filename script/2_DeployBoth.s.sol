@@ -1,8 +1,8 @@
 pragma solidity ^0.8.19;
 
 import "../src/core/ClientChainGateway.sol";
-import "../src/core/ImuaCapsuleBSC.sol";
 import "../src/core/ImuaCapsule.sol";
+import "../src/core/ImuaCapsuleBSC.sol";
 import "../src/core/ImuachainGateway.sol";
 
 import {RewardVault} from "../src/core/RewardVault.sol";
@@ -68,7 +68,7 @@ contract DeployScript is BaseScript {
         if (vm.envOr("USE_BNB_CAPSULE", false)) {
             capsuleImplementation = new ImuaCapsuleBSC();
         } else {
-        capsuleImplementation = new ImuaCapsule(address(0));
+            capsuleImplementation = new ImuaCapsule(address(0));
         }
         rewardVaultImplementation = new RewardVault();
 
