@@ -12,11 +12,6 @@ import {BaseRestakingController} from "./BaseRestakingController.sol";
 import {Errors} from "../libraries/Errors.sol";
 
 import {OptionsBuilder} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
-import {
-    MessagingFee,
-    MessagingParams,
-    MessagingReceipt
-} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
@@ -165,10 +160,12 @@ abstract contract NativeRestakingController is
 
         // REQUEST_DEPOSIT_NST(staker, amount, validatorID).
         // `validatorID` must be at least 32 bytes to satisfy Imuachain message length validation.
+        // slither-disable-next-line encode-packed-collision
         bytes memory actionArgs =
             abi.encodePacked(bytes32(bytes20(msg.sender)), amount, bytes32(bytes20(address(capsule))));
 
         // Delegate/stake `amount` via the capsule.
+        // slither-disable-next-line arbitrary-send-eth
         (bool ok,) =
             address(capsule).call{value: amount}(abi.encodeWithSignature("depositAndDelegate(address)", validator));
         if (!ok) {
