@@ -297,20 +297,23 @@ library Errors {
     error TooEarlySinceLastClaim();
 
     ////////////////////////////////////////
-    //         BNBCapsule Errors           //
+    //       ImuaCapsuleBSC Errors         //
     ////////////////////////////////////////
 
-    /// @dev BNBCapsule: stakeHub not configured
-    error BNBCapsuleStakeHubNotSet();
+    /// @dev ImuaCapsuleBSC: stakeHub not configured
+    error ImuaCapsuleBSCStakeHubNotSet();
 
-    /// @dev BNBCapsule: validator id is invalid
-    error BNBCapsuleInvalidValidatorId();
+    /// @dev ImuaCapsuleBSC: validator id is invalid
+    error ImuaCapsuleBSCInvalidValidatorId();
 
-    /// @dev BNBCapsule: claimable locked BNB is insufficient
-    error BNBCapsuleInsufficientClaimable();
+    /// @dev ImuaCapsuleBSC: claimable locked BNB is insufficient
+    error ImuaCapsuleBSCInsufficientClaimable();
 
-    /// @dev BNBCapsule: claim amount must match sum of whole claimable requests
-    error BNBCapsuleClaimAmountNotAligned();
+    /// @dev ImuaCapsuleBSC: claim amount must match sum of whole claimable requests
+    error ImuaCapsuleBSCClaimAmountNotAligned();
+
+    /// @dev ImuaCapsuleBSC: finalize called but no claim in progress
+    error ImuaCapsuleBSCNoClaimInProgress();
 
     ////////////////////
     //  Vault Errors  //

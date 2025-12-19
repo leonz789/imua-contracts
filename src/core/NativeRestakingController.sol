@@ -127,7 +127,7 @@ abstract contract NativeRestakingController is
         // For BNBNST, use `depositBNBNST(address validator, uint256 amount, uint256 lzFee)` so that Imuachain's
         // validatorID == capsule address.
         validatorID;
-        revert Errors.NotYetSupported();
+        revert Errors.NativeRestakingControllerUnsupportedNativeDeposit();
     }
 
     /// @notice BNBNST deposit where the caller also pays the L0 native fee.
@@ -146,7 +146,7 @@ abstract contract NativeRestakingController is
             revert Errors.ZeroValue();
         }
         if (validator == address(0)) {
-            revert Errors.ZeroValue();
+            revert Errors.ZeroAddress();
         }
 
         if (msg.value != amount + lzFee) {
@@ -166,9 +166,14 @@ abstract contract NativeRestakingController is
 
         // Delegate/stake `amount` via the capsule.
         // slither-disable-next-line arbitrary-send-eth
-        (bool ok,) =
+        (bool ok, bytes memory reason) =
             address(capsule).call{value: amount}(abi.encodeWithSignature("depositAndDelegate(address)", validator));
         if (!ok) {
+            if (reason.length > 0) {
+                assembly {
+                    revert(add(reason, 0x20), mload(reason))
+                }
+            }
             revert Errors.NativeRestakingControllerUnsupportedNativeDeposit();
         }
 
