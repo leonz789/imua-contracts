@@ -120,13 +120,11 @@ abstract contract NativeRestakingController is
     /// @dev This method is NOT using beacon-chain proofs. Instead, it forwards `msg.value` into the capsule
     /// and lets the capsule perform chain-specific locking/delegation (e.g. StakeHub delegation).
     /// The `validatorID` is forwarded to Imuachain as the NST identifier.
-    /// @param validatorID Chain-specific validator identifier. For BNB, we typically pass the validator EVM address
-    /// bytes.
-    function depositNativeStake(bytes calldata validatorID) external payable whenNotPaused nativeRestakingEnabled {
+    /// @dev The parameter is intentionally unnamed because this entrypoint is not yet supported.
+    function depositNativeStake(bytes calldata) external payable whenNotPaused nativeRestakingEnabled {
         // Generic NST flows are not supported for now.
         // For BNBNST, use `depositBNBNST(address validator, uint256 amount, uint256 lzFee)` so that Imuachain's
         // validatorID == capsule address.
-        validatorID;
         revert Errors.NativeRestakingControllerUnsupportedNativeDeposit();
     }
 

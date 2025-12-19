@@ -235,6 +235,12 @@ contract ImuaCapsuleBSC is ReentrancyGuardUpgradeable, ImuaCapsuleStorageBSC, II
             revert Errors.ImuaCapsuleBSCClaimAmountNotAligned();
         }
 
+        // Snapshot + clear claim flags BEFORE the external call (CEI) to satisfy Slither.
+        uint256 requestCount = pendingClaimRequestCount;
+        inClaimProgress = false;
+        pendingClaimAmount = 0;
+        pendingClaimRequestCount = 0;
+
         if (success) {
             if (stakeHub == address(0)) {
                 revert Errors.ImuaCapsuleBSCStakeHubNotSet();
@@ -243,16 +249,11 @@ contract ImuaCapsuleBSC is ReentrancyGuardUpgradeable, ImuaCapsuleStorageBSC, II
                 revert Errors.ImuaCapsuleBSCInvalidValidatorId();
             }
             // Step 4) execute BSC claim, BNB will be transferred to THIS capsule.
-            IStakeHub(stakeHub).claim(validator, pendingClaimRequestCount);
+            IStakeHub(stakeHub).claim(validator, requestCount);
             // Now those BNBs are withdrawable.
             withdrawableBalance += amount;
             lastClaimTimestamp = block.timestamp;
         }
-
-        // Release flag regardless of success, after claim attempt.
-        inClaimProgress = false;
-        pendingClaimAmount = 0;
-        pendingClaimRequestCount = 0;
     }
 
     /// @inheritdoc IImuaCapsule
