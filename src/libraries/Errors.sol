@@ -227,6 +227,17 @@ library Errors {
     /// @dev ImuachainGateway: caller is not the authorized oracle module address
     error ImuachainGatewayNotOracleCaller();
 
+    /// @dev ClientChainGateway: caller is not the authorized bridge verifier
+    error UnauthorizedBridgeVerifier();
+
+    /// @dev ClientChainGateway: oracle delivery execution failed
+    /// @param act The action that failed.
+    /// @param reason The reason for the failure.
+    error OracleDeliveryFailed(Action act, bytes reason);
+
+    /// @dev Caller is not the contract owner
+    error NotOwner();
+
     /// @dev ImuachainGateway: failed to get client chain ids
     error ImuachainGatewayFailedToGetClientChainIds();
 

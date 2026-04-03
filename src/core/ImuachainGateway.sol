@@ -117,6 +117,7 @@ contract ImuachainGateway is
         // we don't track that a request was sent to a chain to allow for retrials
         // if the transaction fails on the destination chain
         _sendInterchainMsg(chainIndex, Action.REQUEST_MARK_BOOTSTRAP, "", false);
+        _queueOutboundMsg(chainIndex, Action.REQUEST_MARK_BOOTSTRAP, "");
         emit BootstrapRequestSent(chainIndex);
     }
 
@@ -214,6 +215,7 @@ contract ImuachainGateway is
             _sendInterchainMsg(
                 clientChainId, Action.REQUEST_ADD_WHITELIST_TOKEN, abi.encodePacked(token, tvlLimit), false
             );
+            _queueOutboundMsg(clientChainId, Action.REQUEST_ADD_WHITELIST_TOKEN, abi.encodePacked(token, tvlLimit));
         } else {
             revert Errors.AddWhitelistTokenFailed(clientChainId, token);
         }
@@ -368,6 +370,13 @@ contract ImuachainGateway is
             address(this).call(abi.encodePacked(selector_, abi.encode(srcChainId, nonce, act, payload)));
         if (!success) {
             revert Errors.RequestOrResponseExecuteFailed(act, nonce, responseOrReason);
+        }
+
+        // Capture handler response and emit for outbound relay (oracle bridge replacement for L0 response path).
+        bytes memory response = abi.decode(responseOrReason, (bytes));
+        if (response.length > 0) {
+            bytes memory fullPayload = abi.encodePacked(Action.RESPOND, response);
+            emit OutboundResponse(srcChainId, nonce, fullPayload);
         }
 
         emit OracleReceived(srcChainId, nonce, act);
@@ -611,6 +620,16 @@ contract ImuachainGateway is
         MessagingReceipt memory receipt =
             _lzSend(srcChainId, payload, options, MessagingFee(fee.nativeFee, 0), refundAddress, payByApp);
         emit MessageSent(act, receipt.guid, receipt.nonce, receipt.fee.nativeFee);
+    }
+
+    /// @dev Queues an outbound message for oracle relay instead of sending via LayerZero.
+    /// The oracle module picks up the emitted event and enqueues it for relay to the client chain.
+    /// @param dstChainId The destination client chain ID.
+    /// @param act The action to be performed.
+    /// @param actionArgs The arguments for the action.
+    function _queueOutboundMsg(uint32 dstChainId, Action act, bytes memory actionArgs) internal whenNotPaused {
+        bytes memory payload = abi.encodePacked(act, actionArgs);
+        emit OutboundMessage(dstChainId, payload);
     }
 
     /// @inheritdoc IImuachainGateway

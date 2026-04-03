@@ -50,7 +50,6 @@ interface IImuachainGateway is IOAppReceiver, IOAppCore {
     /// @param oracleInfo The oracle information of the token.
     /// @param tvlLimit The TVL limit of the token to set on the client chain.
     /// @dev The chain must be registered before adding tokens.
-    /// @dev This function is payable because it sends a message to the client chain.
     /// @dev The tvlLimit is a `uint128` so that it can work on Solana easily. Within this uint,
     /// we can fit 1 trillion tokens with 18 decimals.
     function addWhitelistToken(
@@ -72,8 +71,6 @@ interface IImuachainGateway is IOAppReceiver, IOAppCore {
 
     /// @notice Marks the network as bootstrapped, on the client chain.
     /// @dev Causes an upgrade of the Bootstrap contract to the ClientChainGateway contract.
-    /// @dev Only works if LZ infrastructure is set up and SetPeer has been called.
-    /// @dev This is payable because it requires a fee to be paid to LZ.
     /// @param clientChainId The LayerZero chain id of the client chain.
     function markBootstrap(uint32 clientChainId) external payable;
 

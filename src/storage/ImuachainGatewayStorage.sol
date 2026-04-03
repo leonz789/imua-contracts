@@ -139,6 +139,17 @@ contract ImuachainGatewayStorage is GatewayStorage {
     /// @param act The action that was executed.
     event OracleReceived(uint32 indexed srcChainId, uint64 nonce, Action act);
 
+    /// @notice Emitted when a handler produces a response that must be relayed back to the source chain.
+    /// @param dstChainId The chain to which the response should be delivered.
+    /// @param requestNonce The inbound nonce that triggered this response.
+    /// @param payload The full response payload (Action.RESPOND + requestId + success).
+    event OutboundResponse(uint32 indexed dstChainId, uint64 indexed requestNonce, bytes payload);
+
+    /// @notice Emitted when an admin-initiated outbound message is queued for relay to a client chain.
+    /// @param dstChainId The destination client chain ID.
+    /// @param payload The encoded message (action + args).
+    event OutboundMessage(uint32 indexed dstChainId, bytes payload);
+
     /// @notice The address authorized to call oracleReceive (oracle module EVM address).
     address public oracleCaller;
 
