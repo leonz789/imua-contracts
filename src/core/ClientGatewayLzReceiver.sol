@@ -178,9 +178,16 @@ abstract contract ClientGatewayLzReceiver is PausableUpgradeable, OAppReceiverUp
         if (msg.sender != bridgeVerifier) {
             revert Errors.UnauthorizedBridgeVerifier();
         }
+        if (message.length < 1) {
+            revert Errors.InvalidMessageLength();
+        }
 
         Action act = Action(uint8(message[0]));
         if (act == Action.RESPOND) {
+            // _handleResponse reads response[1:9] and response[9]; require at least 10 bytes.
+            if (message.length < 10) {
+                revert Errors.InvalidMessageLength();
+            }
             _handleResponse(message);
         } else {
             bytes calldata payload = message[1:];

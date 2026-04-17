@@ -77,9 +77,13 @@ interface IImuachainGateway is IOAppReceiver, IOAppCore {
     /// @notice Receives a cross-chain message delivered by the oracle module instead of LayerZero.
     /// @dev The message format is identical to what _lzReceive expects: [action_byte][payload].
     ///      Only callable by the configured oracleCaller address. Unlike _lzReceive, this does
-    ///      not send LayerZero responses back to the source chain.
+    ///      not send LayerZero responses back to the source chain — responses are emitted as
+    ///      `OutboundResponse` for relay via the oracle bridge.
     /// @param srcChainId The LayerZero endpoint ID of the source chain.
-    /// @param nonce The oracle-assigned nonce for this message.
+    /// @param nonce The original request nonce emitted by `BaseRestakingController.XChainMessage`
+    ///              on the source chain. This value is echoed back into any response payload and
+    ///              used on the source side as the `_registeredRequests` key, so it MUST match the
+    ///              nonce that produced this request rather than an oracle-local counter.
     /// @param message The raw message bytes (action + args), same format as LayerZero payload.
     function oracleReceive(uint32 srcChainId, uint64 nonce, bytes calldata message) external;
 

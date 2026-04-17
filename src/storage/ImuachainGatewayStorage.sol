@@ -135,7 +135,8 @@ contract ImuachainGatewayStorage is GatewayStorage {
 
     /// @notice Emitted when a message is received and executed via the oracle bridge.
     /// @param srcChainId The LayerZero endpoint ID of the source chain.
-    /// @param nonce The oracle-assigned nonce for this message.
+    /// @param nonce The original request nonce from the source chain (same value used as the
+    ///              `_registeredRequests` key and echoed in any RESPOND response).
     /// @param act The action that was executed.
     event OracleReceived(uint32 indexed srcChainId, uint64 nonce, Action act);
 
@@ -153,8 +154,13 @@ contract ImuachainGatewayStorage is GatewayStorage {
     /// @notice The address authorized to call oracleReceive (oracle module EVM address).
     address public oracleCaller;
 
+    /// @notice Tracks processed oracle nonces per source chain to prevent replay.
+    /// @dev Indexed by (srcChainId, requestNonce). Unlike LZ path, oracle nonces may arrive
+    ///      out of order, so we use a set rather than a strict-sequential counter.
+    mapping(uint32 => mapping(uint64 => bool)) public processedOracleNonces;
+
     /// @dev Storage gap to allow for future upgrades.
-    uint256[39] private __gap;
+    uint256[38] private __gap;
 
     /**
      * @dev Validates the message length based on the action.

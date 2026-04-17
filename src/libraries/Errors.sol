@@ -227,6 +227,11 @@ library Errors {
     /// @dev ImuachainGateway: caller is not the authorized oracle module address
     error ImuachainGatewayNotOracleCaller();
 
+    /// @dev ImuachainGateway: oracleReceive called with an already-processed (srcChainId, nonce)
+    /// @param srcChainId The source chain ID.
+    /// @param nonce The duplicate request nonce.
+    error DuplicateOracleNonce(uint32 srcChainId, uint64 nonce);
+
     /// @dev ClientChainGateway: caller is not the authorized bridge verifier
     error UnauthorizedBridgeVerifier();
 

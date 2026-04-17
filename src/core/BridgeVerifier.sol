@@ -15,8 +15,11 @@ import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/se
 ///      verifies that 2/3+ of total power has signed before executing messages.
 contract BridgeVerifier is Initializable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
 
-    /// @notice Unique identifier for this bridge instance (prevents cross-bridge replay).
+    /// @notice Domain identifier for this bridge family (shared across deployments in the same validator set).
     uint256 public constant BRIDGE_ID = 1;
+
+    /// @notice Destination chain ID this verifier instance is pinned to. Set at initialization.
+    uint256 public expectedDstChainID;
 
     /// @notice Current validator set nonce (incremented on each valset update).
     uint256 public currentValsetNonce;
@@ -37,7 +40,7 @@ contract BridgeVerifier is Initializable, OwnableUpgradeable, PausableUpgradeabl
     address public gateway;
 
     /// @dev Storage gap for future upgrades.
-    uint256[40] private __gap;
+    uint256[39] private __gap;
 
     event CheckpointExecuted(uint256 indexed dstChainID, uint256 indexed checkpointNonce, uint256 messageCount);
     event ValidatorSetUpdated(uint256 indexed newNonce, uint256 validatorCount, uint256 totalPower);
@@ -53,19 +56,27 @@ contract BridgeVerifier is Initializable, OwnableUpgradeable, PausableUpgradeabl
     error NotAValidator(address signer);
     error ZeroAddress();
     error MessagesHashMismatch();
+    error InvalidDstChainID(uint256 expected, uint256 got);
+    error EmptyValidatorSet();
+    error LengthMismatch();
+    error ZeroPower();
+    error UnsortedValidators(address prev, address curr);
 
     /// @notice Initializes the contract with the initial validator set.
     /// @param owner_ The contract owner.
     /// @param gateway_ The ClientChainGateway address.
-    /// @param initialValidators The initial validator addresses.
-    /// @param initialPowers The initial validator powers.
+    /// @param expectedDstChainID_ The destination chain ID this verifier is pinned to.
+    /// @param initialValidators The initial validator addresses, strictly sorted ascending.
+    /// @param initialPowers The initial validator powers, aligned with initialValidators.
     function initialize(
         address owner_,
         address gateway_,
+        uint256 expectedDstChainID_,
         address[] calldata initialValidators,
         uint256[] calldata initialPowers
     ) external initializer {
         if (gateway_ == address(0) || owner_ == address(0)) revert ZeroAddress();
+        if (expectedDstChainID_ == 0) revert InvalidDstChainID(0, 0);
 
         __Ownable_init();
         __Pausable_init();
@@ -73,18 +84,36 @@ contract BridgeVerifier is Initializable, OwnableUpgradeable, PausableUpgradeabl
         _transferOwnership(owner_);
 
         gateway = gateway_;
+        expectedDstChainID = expectedDstChainID_;
 
-        uint256 total;
-        for (uint256 i = 0; i < initialValidators.length; i++) {
-            if (initialValidators[i] == address(0)) revert ZeroAddress();
-            validators.push(initialValidators[i]);
-            validatorPower[initialValidators[i]] = initialPowers[i];
-            total += initialPowers[i];
-        }
+        uint256 total = _validateAndIngestValset(initialValidators, initialPowers);
         totalPower = total;
         currentValsetNonce = 1;
 
         emit ValidatorSetUpdated(1, initialValidators.length, total);
+    }
+
+    /// @dev Validates a validator set and writes it to storage. Requires strictly ascending
+    ///      addresses (giving free uniqueness/nonzero checks) and non-zero powers.
+    function _validateAndIngestValset(address[] calldata vals, uint256[] calldata powers)
+        internal
+        returns (uint256 total)
+    {
+        uint256 n = vals.length;
+        if (n == 0) revert EmptyValidatorSet();
+        if (powers.length != n) revert LengthMismatch();
+
+        address prev;
+        for (uint256 i = 0; i < n; i++) {
+            address v = vals[i];
+            if (v == address(0)) revert ZeroAddress();
+            if (i > 0 && v <= prev) revert UnsortedValidators(prev, v);
+            if (powers[i] == 0) revert ZeroPower();
+            validators.push(v);
+            validatorPower[v] = powers[i];
+            total += powers[i];
+            prev = v;
+        }
     }
 
     /// @notice Verifies a checkpoint signed by 2/3+ validators and delivers messages to the gateway.
@@ -106,12 +135,19 @@ contract BridgeVerifier is Initializable, OwnableUpgradeable, PausableUpgradeabl
         bytes32[] calldata r,
         bytes32[] calldata s
     ) external whenNotPaused nonReentrant {
+        if (dstChainID != expectedDstChainID) {
+            revert InvalidDstChainID(expectedDstChainID, dstChainID);
+        }
         uint256 expected = lastCheckpointNonce[dstChainID] + 1;
         if (checkpointNonce != expected) {
             revert InvalidCheckpointNonce(expected, checkpointNonce);
         }
         if (signers.length != v.length || signers.length != r.length || signers.length != s.length) {
             revert InvalidSignatureLength();
+        }
+        // Bind the signed messagesHash to the actual messages being executed.
+        if (keccak256(abi.encode(messages)) != messagesHash) {
+            revert MessagesHashMismatch();
         }
 
         // Reconstruct and verify checkpoint hash with 2/3+ power
@@ -173,23 +209,18 @@ contract BridgeVerifier is Initializable, OwnableUpgradeable, PausableUpgradeabl
         }
         delete validators;
 
-        // Set new
-        uint256 newTotal;
-        for (uint256 i = 0; i < newValidators.length; i++) {
-            if (newValidators[i] == address(0)) revert ZeroAddress();
-            validators.push(newValidators[i]);
-            validatorPower[newValidators[i]] = newPowers[i];
-            newTotal += newPowers[i];
-        }
+        // Validate and ingest the new set
+        uint256 newTotal = _validateAndIngestValset(newValidators, newPowers);
         totalPower = newTotal;
         currentValsetNonce = newNonce;
 
         emit ValidatorSetUpdated(newNonce, newValidators.length, newTotal);
     }
 
-    /// @dev Hashes a validator set for signing.
+    /// @dev Hashes a validator set for signing. Requires equal-length inputs.
     function _hashValset(uint256 nonce, address[] calldata vals, uint256[] calldata powers) internal pure returns (bytes32) {
-        bytes memory valsetData = abi.encode(uint256(1), nonce); // BRIDGE_ID = 1
+        if (vals.length != powers.length) revert LengthMismatch();
+        bytes memory valsetData = abi.encode(BRIDGE_ID, nonce);
         for (uint256 i = 0; i < vals.length; i++) {
             valsetData = abi.encodePacked(valsetData, vals[i], powers[i]);
         }

@@ -65,7 +65,7 @@ contract BridgeVerifierTest is Test {
             valsArr[i] = vals[i];
             powersArr[i] = powers[i];
         }
-        verifier.initialize(address(this), address(gateway), valsArr, powersArr);
+        verifier.initialize(address(this), address(gateway), 101, valsArr, powersArr);
     }
 
     function _signCheckpoint(

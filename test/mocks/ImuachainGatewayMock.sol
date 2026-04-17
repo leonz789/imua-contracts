@@ -368,6 +368,10 @@ contract ImuachainGatewayMock is
         if (msg.sender != oracleCaller) {
             revert Errors.ImuachainGatewayNotOracleCaller();
         }
+        if (processedOracleNonces[srcChainId][nonce]) {
+            revert Errors.DuplicateOracleNonce(srcChainId, nonce);
+        }
+        processedOracleNonces[srcChainId][nonce] = true;
         _validateMessageLength(message);
 
         Action act = Action(uint8(message[0]));
@@ -381,6 +385,13 @@ contract ImuachainGatewayMock is
             address(this).call(abi.encodePacked(selector_, abi.encode(srcChainId, nonce, act, payload)));
         if (!success) {
             revert Errors.RequestOrResponseExecuteFailed(act, nonce, responseOrReason);
+        }
+
+        // Mirror production: emit OutboundResponse when the handler returned a non-empty response.
+        bytes memory response = abi.decode(responseOrReason, (bytes));
+        if (response.length > 0) {
+            bytes memory fullPayload = abi.encodePacked(Action.RESPOND, response);
+            emit OutboundResponse(srcChainId, nonce, fullPayload);
         }
 
         emit OracleReceived(srcChainId, nonce, act);

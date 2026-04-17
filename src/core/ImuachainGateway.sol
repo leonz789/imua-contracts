@@ -357,6 +357,11 @@ contract ImuachainGateway is
         if (msg.sender != oracleCaller) {
             revert Errors.ImuachainGatewayNotOracleCaller();
         }
+        // Replay protection: each (srcChainId, requestNonce) may only be processed once.
+        if (processedOracleNonces[srcChainId][nonce]) {
+            revert Errors.DuplicateOracleNonce(srcChainId, nonce);
+        }
+        processedOracleNonces[srcChainId][nonce] = true;
         _validateMessageLength(message);
 
         Action act = Action(uint8(message[0]));
